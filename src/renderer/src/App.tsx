@@ -1,3 +1,4 @@
+import { installMeshcoatAutomation } from './automation'
 import {
   createSignal,
   createEffect,
@@ -160,13 +161,13 @@ export default function App(): JSX.Element {
     e.preventDefault()
     const startY = e.clientY
     const startH = textureDrawerHeight()
-    const onMove = (ev: PointerEvent) => {
+    const onMove = (ev: PointerEvent): void => {
       const deltaY = startY - ev.clientY
       const nextH = Math.max(140, Math.min(window.innerHeight * 0.6, startH + deltaY))
       setTextureDrawerHeight(nextH)
       saveLayoutProfile({ textureDrawerHeight: nextH })
     }
-    const onUp = () => {
+    const onUp = (): void => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
     }
@@ -859,7 +860,8 @@ export default function App(): JSX.Element {
    */
   async function resolveModelPath(
     project: MeshCoatProject,
-    projectPath: string | null
+    projectPath: string | null,
+    interactive = true
   ): Promise<boolean> {
     const saved = project.modelPath
     if (!saved) {
@@ -870,11 +872,17 @@ export default function App(): JSX.Element {
     const sep = projectPath?.includes('\\') ? '\\' : '/'
     const candidates = [
       saved,
+      ...(projectDir !== null && !/^(?:[a-z]:|[/\\])/i.test(saved)
+        ? [`${projectDir}${sep}${saved}`]
+        : []),
       ...(project.modelPathAlternates ?? []),
       ...(projectDir !== null ? [`${projectDir}${sep}${fileName}`] : [])
     ]
     let found = await window.api.findExistingFile(candidates)
     if (!found) {
+      if (!interactive) {
+        throw new Error(`Model not found: ${saved}. Pass modelPath to meshcoat_open.`)
+      }
       logger.warn('Model not found at any known location:', candidates)
       const locate = window.confirm(
         `The model for this project wasn't found:\n\n${saved}\n\n` +
@@ -915,7 +923,11 @@ export default function App(): JSX.Element {
     setCurrentProjectPath(projectPath)
   }
 
-  async function handleOpenProjectFile(path: string): Promise<void> {
+  async function handleOpenProjectFile(
+    path: string,
+    modelPathOverride?: string,
+    interactive = true
+  ): Promise<void> {
     const handle = await getReadyViewport()
     logger.info('Opening project', path)
     const bytes = await readFileBytes(path)
@@ -923,7 +935,10 @@ export default function App(): JSX.Element {
     logger.info(
       `Read project ${path}: format v${project.version}, ${(bytes.byteLength / 1048576).toFixed(1)} MB`
     )
-    const relinked = await resolveModelPath(project, path)
+    if (modelPathOverride) {
+      project.modelPath = modelPathOverride
+    }
+    const relinked = await resolveModelPath(project, path, interactive)
     await handle.loadProject(project, stackSnapshots)
     logger.info(
       `Project loaded: ${project.name}, model ${project.modelPath}, ${project.textureSize}px`
@@ -1462,6 +1477,33 @@ export default function App(): JSX.Element {
         showToast
       }
     }
+
+    let disposeAutomation: (() => void) | undefined
+    let automationMounted = true
+    void window.api.automationEnabled().then((enabled) => {
+      if (!enabled || !automationMounted) {
+        return
+      }
+      disposeAutomation = installMeshcoatAutomation({
+        ready: () => initialMountDone,
+        viewport: () => viewportHandle,
+        project: () => ({
+          name: modelName(),
+          modelPath: currentModelPath(),
+          projectPath: currentProjectPath(),
+          dirty: isDirty()
+        }),
+        openModel: (path, size) => handleOpenModel(path, size),
+        openProject: (path, modelPath) => handleOpenProjectFile(path, modelPath, false),
+        saveProject: (path) => writeProject(path, 'Saved by MCP'),
+        setTool: setActiveTool,
+        closeWelcome: () => setShowStartWizard(false)
+      })
+    })
+    onCleanup(() => {
+      automationMounted = false
+      disposeAutomation?.()
+    })
 
     // Check if Blender is available for .blend imports on startup
     void (async () => {

@@ -6,6 +6,10 @@ directories:
   output: dist
 
 files:
+  - '!work{,/**}'
+  - '!impasto-user-data{,/**}'
+  - '!impasto{,/**}'
+  - '!tools{,/**}'
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
@@ -15,6 +19,14 @@ files:
 
 asarUnpack:
   - resources/**
+
+extraFiles:
+  - from: impasto/authored-brush/README.txt
+    to: MESHCOAT-OWN-BRUSH.txt
+  - from: impasto/brushes/LICENSE.md
+    to: MESHCOAT-BRUSH-LICENSE.md
+  - from: LICENSE
+    to: LICENSE.MeshCoat.txt
 
 win:
   executableName: MeshCoat

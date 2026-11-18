@@ -5,7 +5,9 @@ import {
   type AbrBrushPreset,
   type AbrFileResult
 } from './abrLoader'
-import { setSpacing, setTipTexturePath } from './brush'
+import { brush, setSpacing, setTipTexturePath, setTexturePath, setOpacity } from './brush'
+import impastoPack from '../../../../impasto/brushes/impasto-impasto.json'
+import sculptPack from '../../../../impasto/authored-brush/impasto-sculpt.json'
 import { idbGet, idbDelete } from '../utils/idbStorage'
 import { readFileBytes, writeFileParts } from '../utils/fileIo'
 import { createLogger } from '../utils/logger'
@@ -24,7 +26,9 @@ const standardPack: AbrFileResult = {
   brushes: getStandardBrushPresets()
 }
 
-const [brushPacks, setBrushPacks] = createSignal<AbrFileResult[]>([standardPack])
+const builtinPacks: AbrFileResult[] = [standardPack, sculptPack, impastoPack]
+const [brushPacks, setBrushPacks] = createSignal<AbrFileResult[]>(builtinPacks)
+const [ready, setReady] = createSignal(false)
 const [activeBrushPreset, setActiveBrushPresetRaw] = createSignal<AbrBrushPreset | null>(null)
 const [isBrushManagerOpen, setIsBrushManagerOpen] = createSignal(false)
 
@@ -72,9 +76,10 @@ export async function initBrushPresets(): Promise<void> {
     }
   }
 
-  setBrushPacks([standardPack, ...customPacks])
+  setBrushPacks([...builtinPacks, ...customPacks])
   restoreActiveBrushPreset(brushPacks())
   restoreBrushGroup(brushPacks())
+  setReady(true)
 }
 
 async function loadPackFiles(): Promise<AbrFileResult[]> {
@@ -308,22 +313,54 @@ export function selectBrushPreset(
     setBrushGroup([])
   }
   if (!preset) {
+    brush.setTipReliefFromLuma(false)
+    brush.setTipHeight16(false)
+    brush.setChannelEnabled('height', false)
     setActiveBrushPresetRaw(null)
     setTipTexturePath(null)
     try {
       localStorage.removeItem(ACTIVE_PRESET_KEY)
-    } catch {}
+    } catch {
+      /* Storage may be unavailable; the current brush still works. */
+    }
     return
   }
 
   setActiveBrushPresetRaw(preset)
   setTipTexturePath(preset.dataUrl)
+  brush.setTipReliefFromLuma(!!preset.impasto)
+  brush.setTipHeight16(!!preset.authoredHeight)
+  brush.setChannelEnabled('height', !!preset.authoredHeight)
+  if (preset.authoredHeight) {
+    brush.setHeightAmount(0.012)
+  }
+  if (preset.impasto) {
+    setTexturePath(null, false)
+    brush.setChannelEnabled('baseColor', true)
+    brush.setChannelEnabled('normal', true)
+    brush.setChannelEnabled('roughness', true)
+    brush.setChannelEnabled('metalness', true)
+    brush.setNormalStrength(0.018)
+    brush.setRoughnessValue(0.88)
+    brush.setMetalnessValue(0)
+    brush.setAngleFollowStroke(true)
+    brush.setBrushRotation(0)
+    brush.setAngleJitter(0.035)
+    brush.setSizeJitter(0.07)
+    brush.setOpacityJitter(0)
+    brush.setHueJitter(0)
+    brush.setSaturationJitter(0)
+    brush.setValueJitter(0)
+    setOpacity(0.94)
+  }
   if (typeof preset.spacing === 'number' && preset.spacing > 0) {
     setSpacing(preset.spacing)
   }
   try {
     localStorage.setItem(ACTIVE_PRESET_KEY, preset.id)
-  } catch {}
+  } catch {
+    /* Storage may be unavailable; the current brush still works. */
+  }
 }
 
 /** Clears the active custom brush tip, reverting to a default round brush. */
@@ -343,7 +380,7 @@ export function addBrushPack(pack: AbrFileResult): void {
 
 /** Removes a brush pack by name. */
 export function removeBrushPack(packName: string): void {
-  if (packName === 'Standard Tips') {
+  if (builtinPacks.some((pack) => pack.packName === packName)) {
     return
   }
   const next = brushPacks().filter((p) => p.packName !== packName)
@@ -406,6 +443,7 @@ export async function loadAbrPath(filePath: string): Promise<AbrFileResult> {
 }
 
 export const brushPresets = {
+  ready,
   packs: brushPacks,
   active: activeBrushPreset,
   isManagerOpen: isBrushManagerOpen,

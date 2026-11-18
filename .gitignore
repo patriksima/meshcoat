@@ -6,3 +6,13 @@ out
 *.log*
 */settings.local.json
 .pbr-smoke-out
+impasto/.godot/
+impasto-user-data/
+
+# Local test runs, bridge state and generated evidence
+work/
+impasto/evidence/
+impasto/height-evidence/
+
+# Godot generates local import settings for the standalone fixtures
+impasto/**/*.import

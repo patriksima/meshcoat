@@ -143,6 +143,7 @@ export function buildUvMesh(mesh: THREE.Mesh): THREE.Mesh {
         t.normalize()
       }
       bt.crossVectors(n, t).normalize()
+      if (det < 0) bt.negate()
       for (let corner = 0; corner < 3; corner++) {
         const vi = i + corner
         faceTangent[vi * 3] = t.x

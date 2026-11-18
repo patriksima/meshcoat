@@ -1,11 +1,13 @@
 import * as THREE from 'three'
 
 /**
- * The PBR channels a layer can carry. Every channel is stored exactly the way
+ * The PBR channels a layer can carry. Color/normal/scalar channels are stored the way
  * base color has always been stored — an RGBA8 render target holding
  * premultiplied values, alpha = per-texel coverage — so the whole existing
  * pipeline (paint shader, dilate, blend compositing, blit, CPU snapshots) works
- * on all four without a second code path. What differs per channel is only:
+ * across the original four channels. Height additionally packs a signed 16-bit
+ * scalar into RG (opaque alpha), with scalar-aware compositing and PNG16 export.
+ * What differs per channel is:
  *
  *   - its color space (base color is sRGB, the data channels are linear), and
  *   - the constant the layer stack flattens the finished composite against,
@@ -16,12 +18,12 @@ import * as THREE from 'three'
  * (see PaintEngine.ensureChannel), so a base-color-only project allocates
  * base-color-only buffers and its undo snapshots carry base color only.
  */
-export const PAINT_CHANNELS = ['baseColor', 'roughness', 'metalness', 'normal'] as const
+export const PAINT_CHANNELS = ['baseColor', 'roughness', 'metalness', 'normal', 'height'] as const
 
 export type PaintChannel = (typeof PAINT_CHANNELS)[number]
 
-/** The three channels that are not base color — the ones lazily allocated. */
-export const PBR_CHANNELS = ['roughness', 'metalness', 'normal'] as const
+/** Non-color channels, allocated lazily. */
+export const PBR_CHANNELS = ['roughness', 'metalness', 'normal', 'height'] as const
 export type PbrChannel = (typeof PBR_CHANNELS)[number]
 
 export interface ChannelSpec {
@@ -47,6 +49,14 @@ export interface ChannelSpec {
 }
 
 export const CHANNEL_SPECS: Record<PaintChannel, ChannelSpec> = {
+  height: {
+    label: 'Height',
+    short: 'Height',
+    colorSpace: THREE.NoColorSpace,
+    flattenDefault: new THREE.Vector4(128 / 255, 0, 0, 1),
+    exportSuffix: 'Height16',
+    vector: false
+  },
   baseColor: {
     label: 'Base Color',
     short: 'Color',
@@ -86,6 +96,7 @@ export const CHANNEL_SPECS: Record<PaintChannel, ChannelSpec> = {
 
 /** Which channels a brush stroke writes, and the value it writes to each. */
 export interface ChannelPayload {
+  height?: number
   baseColor?: { color: THREE.Color; alpha: number }
   roughness?: number
   metalness?: number

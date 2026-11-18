@@ -83,6 +83,7 @@ const dilateFragmentShader = /* glsl */ `
   uniform sampler2D uColor;
   uniform sampler2D uMask;
   uniform vec2 uTexelSize;
+  uniform float uHeightData;
   varying vec2 vUv;
   void main() {
     float ownMask = texture2D(uMask, vUv).r;
@@ -98,6 +99,7 @@ const dilateFragmentShader = /* glsl */ `
         if (x == 0 && y == 0) continue;
         vec2 offset = vec2(float(x), float(y)) * uTexelSize;
         if (texture2D(uMask, vUv + offset).r > 0.5) {
+          if(uHeightData>0.5){gl_FragColor=texture2D(uColor,vUv+offset);return;}
           sum += texture2D(uColor, vUv + offset);
           count += 1.0;
         }
@@ -119,6 +121,8 @@ export interface StrokeParams {
   alpha?: number
   brushTexture?: THREE.Texture | null
   brushTipTexture?: THREE.Texture | null
+  tipReliefFromLuma?: boolean
+  tipHeight16?: boolean
   textureScale?: number
   /** Sub-rectangle of the source texture to draw from (see brush.textureRegion). */
   textureRegion?: { x: number; y: number; w: number; h: number; rotation: number }
@@ -320,7 +324,8 @@ export class PaintEngine {
       uniforms: {
         uColor: { value: null },
         uMask: { value: null },
-        uTexelSize: { value: new THREE.Vector2(1 / textureSize, 1 / textureSize) }
+        uTexelSize: { value: new THREE.Vector2(1 / textureSize, 1 / textureSize) },
+        uHeightData: { value: 0 }
       },
       vertexShader: dilateVertexShader,
       fragmentShader: dilateFragmentShader,
@@ -352,14 +357,19 @@ export class PaintEngine {
     // up exactly right regardless of the renderer's own default clear
     // color/alpha — a transparent (opacity 0) quad can't be trusted to undo
     // whatever autoClear wrote first.
-    const clearColor = channel === 'baseColor' ? this.baseColor : new THREE.Color(0x000000)
-    const clearAlpha = channel === 'baseColor' ? this.baseAlpha : 0
+    const clearColor =
+      channel === 'height'
+        ? new THREE.Color(128 / 255, 0, 0)
+        : channel === 'baseColor'
+          ? this.baseColor
+          : new THREE.Color(0x000000)
+    const clearAlpha = channel === 'height' ? 1 : channel === 'baseColor' ? this.baseAlpha : 0
     const prevTarget = this.renderer.getRenderTarget()
     const prevClearColor = new THREE.Color()
     this.renderer.getClearColor(prevClearColor)
     const prevClearAlpha = this.renderer.getClearAlpha()
-    this.renderer.setClearColor(clearColor, clearAlpha)
     this.renderer.setRenderTarget(read)
+    this.renderer.setClearColor(clearColor, clearAlpha)
     this.renderer.clear(true, false, false)
     this.renderer.setRenderTarget(prevTarget)
     this.renderer.setClearColor(prevClearColor, prevClearAlpha)
@@ -508,7 +518,8 @@ export class PaintEngine {
   }
 
   /** Bleeds `target`'s island-edge colors outward into gutter texels by a couple texels (see dilateFragmentShader). */
-  private dilate(target: THREE.WebGLRenderTarget, iterations = 4): void {
+  private dilate(target: THREE.WebGLRenderTarget, iterations = 4, heightData = false): void {
+    this.dilateMaterial.uniforms.uHeightData.value = heightData ? 1 : 0
     this.dilateMaterial.uniforms.uMask.value = this.surface.coverageMask.texture
     // Scratch in the target's own color space: bouncing a linear data channel
     // through an sRGB buffer re-quantizes every value on each pass.
@@ -611,7 +622,7 @@ export class PaintEngine {
       this.coverageClipMaterial.uniforms.uColor.value = buffers.read.texture
       this.renderer.setRenderTarget(write)
       this.renderer.render(this.coverageClipScene!, this.orthoCamera)
-      this.dilate(write)
+      this.dilate(write, 4, channel === 'height')
       this.swap(channel)
     }
     this.renderer.setRenderTarget(prevTarget)
@@ -699,6 +710,12 @@ export class PaintEngine {
         u.uNormalStrength.value = payload.normal ?? 1
         break
       }
+      case 'height': {
+        u.uBrushColor.value.set(0, 0, 0, erase ? 0 : 1)
+        u.uChannelMode.value = 3
+        u.uNormalStrength.value = payload.height ?? 0
+        break
+      }
     }
   }
 
@@ -708,7 +725,9 @@ export class PaintEngine {
     const payload: ChannelPayload = params.channels ?? {
       baseColor: { color: params.color, alpha: params.alpha ?? 1 }
     }
-    const channels = payloadChannels(payload)
+    const channels = params.erase
+      ? [...new Set([...payloadChannels(payload), ...this.allocatedChannels])]
+      : payloadChannels(payload)
     if (channels.length === 0) {
       return
     }
@@ -725,6 +744,8 @@ export class PaintEngine {
     u.uUseTexture.value = params.brushTexture ? 1 : 0
     u.uBrushTipTexture.value = params.brushTipTexture ?? null
     u.uUseTipTexture.value = params.brushTipTexture ? 1 : 0
+    u.uTipReliefFromLuma.value = params.tipReliefFromLuma ? 1 : 0
+    u.uTipHeight16.value = params.tipHeight16 ? 1 : 0
     u.uTextureScale.value = params.textureScale ?? 1
     this.applyTextureRegion(params.textureRegion, params.textureRepeat)
     // 'tip' placement means one copy of the region per dab, centred and rotated
@@ -825,10 +846,16 @@ export class PaintEngine {
       const write = this.writeTarget(channel)
       this.applyChannelPayload(channel, payload, params.erase ?? false, params.channelMaps)
       u.uPrevTexture.value = buffers.read.texture
+      const autoClear = this.renderer.autoClear
+      if (channel === 'height') {
+        this.blit(buffers.read.texture, write)
+        this.renderer.autoClear = false
+      }
       this.renderer.setRenderTarget(write)
       this.renderer.render(this.orthoScene, this.orthoCamera)
+      this.renderer.autoClear = autoClear
       this.renderer.setRenderTarget(prevTarget)
-      this.dilate(write)
+      this.dilate(write, 4, channel === 'height')
       this.swap(channel)
     }
     u.uChannelMode.value = 0
@@ -913,6 +940,9 @@ export class PaintEngine {
     // lighting, not just inconsistent on export.
     const prevTarget = this.renderer.getRenderTarget()
     for (const channel of this.allocatedChannels) {
+      if (channel === 'height') {
+        continue
+      } // Color filters must not process packed scalar bytes.
       const buffers = this.buf(channel)
       const write = this.writeTarget(channel)
       u.uPrevTexture.value = buffers.read.texture
@@ -958,7 +988,7 @@ export class PaintEngine {
     // geometry, so there is no height field to take a slope from — it would
     // write a flat (neutral) normal over whatever is already there and quietly
     // erase detail. Stamping surface relief is the brush's job.
-    const channels = payloadChannels(payload).filter((c) => c !== 'normal')
+    const channels = payloadChannels(payload).filter((c) => c !== 'normal' && c !== 'height')
     if (channels.length === 0) {
       return
     }
@@ -1124,6 +1154,10 @@ export class PaintEngine {
       // neutral encoded normal, fully covering.
       return { color: new THREE.Color(0.5, 0.5, 1), quadAlpha: 1 }
     }
+    if (channel === 'height') {
+      const v = Math.round(THREE.MathUtils.clamp((payload.height ?? 0) * 32767 + 32768, 0, 65535))
+      return { color: new THREE.Color(Math.floor(v / 256) / 255, (v % 256) / 255, 0), quadAlpha: 1 }
+    }
     const v = THREE.MathUtils.clamp(payload[channel] ?? 0, 0, 1)
     return { color: new THREE.Color(v, v, v), quadAlpha: 1 }
   }
@@ -1220,10 +1254,16 @@ export class PaintEngine {
     this.applyProjection(projection)
 
     const prevTarget = this.renderer.getRenderTarget()
+    const autoClear = this.renderer.autoClear
+    if (channel === 'height') {
+      this.blit(buffers.read.texture, write)
+      this.renderer.autoClear = false
+    }
     this.renderer.setRenderTarget(write)
     this.renderer.render(this.orthoScene, this.orthoCamera)
+    this.renderer.autoClear = autoClear
     this.renderer.setRenderTarget(prevTarget)
-    this.dilate(write)
+    this.dilate(write, 4, channel === 'height')
 
     u.uFillMode.value = 0
     u.uRestrictFace.value = 0
@@ -1345,7 +1385,9 @@ export class PaintEngine {
     for (const channel of channels) {
       const mine = this.buf(channel)
       const theirs = other.buf(channel)
-      if (backdropOpacity < 1) {
+      u.uHeight.value = channel === 'height' ? 1 : 0
+      u.uBackdropOpacity.value = channel === 'height' ? backdropOpacity : 1
+      if (backdropOpacity < 1 && channel !== 'height') {
         fadeMat.map = theirs.read.texture
         fadeMat.needsUpdate = true
         quad.material = fadeMat
@@ -1532,7 +1574,9 @@ export class PaintEngine {
     u.uErase.value = options.erase ? 1 : 0
 
     const channels: PaintChannel[] =
-      options.erase && eraseChannels ? this.allocatedChannels : ['baseColor']
+      options.erase && eraseChannels
+        ? this.allocatedChannels.filter((c) => c !== 'height')
+        : ['baseColor']
 
     const prevMaterial = this.uvMesh.material
     this.uvMesh.material = this.edgeWearMaterial
@@ -1557,7 +1601,7 @@ export class PaintEngine {
       const write = this.writeTarget(channel)
       this.renderer.setRenderTarget(write)
       this.renderer.render(this.orthoScene, this.orthoCamera)
-      this.dilate(write)
+      this.dilate(write, 4, channel === 'height')
       this.swap(channel)
     }
 
@@ -1744,14 +1788,19 @@ export class PaintEngine {
     if (!buffers) {
       return
     }
-    const color = channel === 'baseColor' ? this.baseColor : new THREE.Color(0x000000)
-    const alpha = channel === 'baseColor' ? this.baseAlpha : 0
+    const color =
+      channel === 'height'
+        ? new THREE.Color(128 / 255, 0, 0)
+        : channel === 'baseColor'
+          ? this.baseColor
+          : new THREE.Color(0x000000)
+    const alpha = channel === 'height' ? 1 : channel === 'baseColor' ? this.baseAlpha : 0
     const prevTarget = this.renderer.getRenderTarget()
     const prevClearColor = new THREE.Color()
     this.renderer.getClearColor(prevClearColor)
     const prevClearAlpha = this.renderer.getClearAlpha()
-    this.renderer.setClearColor(color, alpha)
     this.renderer.setRenderTarget(buffers.read)
+    this.renderer.setClearColor(color, alpha)
     this.renderer.clear(true, false, false)
     this.renderer.setClearColor(prevClearColor, prevClearAlpha)
     this.renderer.setRenderTarget(prevTarget)

@@ -256,3 +256,7 @@ CI (`.github/workflows/ci.yml`) builds Windows, Linux and macOS on every push to
 ## License
 
 MeshCoat is free software under the **GNU General Public License v3.0 or later**. See [LICENSE](LICENSE).
+
+## Experimental height painting and MCP
+
+See [scalar-height impasto brushes](IMPASTO.md) and the [local MCP interface](MCP.md) for the opt-in prototype, example models, feedback tools, validation commands and Godot export.

@@ -189,7 +189,8 @@ export function applyViewModeToPiece(rt: ViewportRuntime, piece: PaintPiece): vo
   // Only the base-color composite is stored premultiplied; the data channels
   // are already resolved to straight values by the flatten pass.
   mat.uniforms.uPremultiplied.value = rt.viewMode === 'baseColor' ? 1 : 0
-  mat.uniforms.uComponent.value = piece.stack.channelComponent(rt.viewMode) ?? -1
+  mat.uniforms.uComponent.value =
+    rt.viewMode === 'height' ? 3 : (piece.stack.channelComponent(rt.viewMode) ?? -1)
   piece.mesh.material = mat
 }
 

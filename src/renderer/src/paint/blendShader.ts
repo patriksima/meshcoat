@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { HEIGHT_GLSL } from './heightData'
 
 /** Standard layer blend modes (Photoshop/Krita/GIMP-style naming). */
 export const BLEND_MODES = [
@@ -58,6 +59,8 @@ export function blendModeIndex(mode: BlendMode | undefined): number {
 }
 
 export interface BlendCompositeUniforms {
+  uHeight: { value: number }
+  uBackdropOpacity: { value: number }
   tBackdrop: { value: THREE.Texture | null }
   tSource: { value: THREE.Texture | null }
   tMask: { value: THREE.Texture | null }
@@ -85,7 +88,9 @@ export function createBlendCompositeMaterial(): THREE.ShaderMaterial & {
     uUseMask: { value: 0 },
     uMaskOpacity: { value: 1 },
     uOpacity: { value: 1 },
-    uBlendMode: { value: 0 }
+    uBlendMode: { value: 0 },
+    uHeight: { value: 0 },
+    uBackdropOpacity: { value: 1 }
   }
 
   return new THREE.ShaderMaterial({
@@ -105,7 +110,10 @@ export function createBlendCompositeMaterial(): THREE.ShaderMaterial & {
       uniform float uMaskOpacity;
       uniform float uOpacity;
       uniform int uBlendMode;
+      uniform float uHeight;
+      uniform float uBackdropOpacity;
       varying vec2 vUv;
+      ${HEIGHT_GLSL}
 
       // --- Separable blend functions (per-channel, straight-alpha [0,1] input) ---
       float bMultiply(float b, float s) { return b * s; }
@@ -198,6 +206,13 @@ export function createBlendCompositeMaterial(): THREE.ShaderMaterial & {
           as *= clamp(texture2D(tMask, vUv).r, 0.0, 1.0) * uMaskOpacity;
         }
         as *= uOpacity;
+
+        if (uHeight > 0.5) {
+          // Height layers are additive signed offsets. Coverage/mask/opacity
+          // scale the offset, not the two encoded bytes independently.
+          gl_FragColor=packHeight(readHeight(backdropRaw)*uBackdropOpacity+readHeight(srcRaw)*as);
+          return;
+        }
 
         vec3 blended = applyBlend(uBlendMode, cb, cs);
         // Blend mode only applies where the backdrop has coverage — over bare

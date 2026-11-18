@@ -28,15 +28,20 @@
     "build:linux": "npm run build && electron-builder --linux",
     "build:all": "npm run build && electron-builder -wl",
     "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "start:mcp": "node mcp/launch.mjs",
+    "mcp": "node mcp/server.mjs",
+    "test:mcp": "node tools/mcp-smoke.mjs"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "ag-psd": "^31.0.2",
     "lucide-solid": "^1.44.0",
     "solid-js": "^1.9.14",
-    "three": "^0.185.1"
+    "three": "^0.185.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",

@@ -6,6 +6,7 @@ import { SparklesIcon, MaterialChannelsIcon, CircleDotIcon, FeatherIcon, CheckIc
 
 /** Distinct accent colors per channel for quick recognition. */
 const CHANNEL_ACCENT: Record<PaintChannel, string> = {
+  height: 'bg-orange-600/20 border-orange-500/70 text-orange-100',
   baseColor: 'bg-emerald-600/20 border-emerald-500/70 text-emerald-100',
   roughness: 'bg-sky-600/20 border-sky-500/70 text-sky-100',
   metalness: 'bg-amber-600/20 border-amber-500/70 text-amber-100',
@@ -144,28 +145,63 @@ export default function MaterialChannelsPanel(props: MaterialChannelsPanelProps)
         </Show>
 
         {/* Relief / Normal Slider */}
-        <Show when={brush.channelEnabled().normal}>
+        <Show when={brush.channelEnabled().height}>
+          <Slider
+            label="Paint height (model units)"
+            value={brush.heightAmount()}
+            min={-0.06}
+            max={0.06}
+            step={0.0005}
+            displayValue={(v) => v.toFixed(4)}
+            onChange={brush.setHeightAmount}
+            presets={[
+              { label: 'Carve', value: -0.012 },
+              { label: 'Thin', value: 0.004 },
+              { label: 'Impasto', value: 0.012 },
+              { label: 'Thick', value: 0.025 }
+            ]}
+          />
+          <p class="text-[10px] text-zinc-500">
+            Height is retained. Normals follow the combined height. New layers add paint thickness.
+          </p>
+        </Show>
+        <Show when={brush.channelEnabled().normal && !brush.channelEnabled().height}>
           <div class="space-y-1">
             <Slider
               label={valueLabel('normal', 'Relief')}
               icon={(p) => <FeatherIcon size={p.size} class="text-violet-400" />}
               value={brush.normalStrength()}
-              min={-4}
-              max={4}
-              step={0.05}
-              displayValue={(v) => (v >= 0 ? `+${v.toFixed(2)}` : v.toFixed(2))}
+              min={brush.tipReliefFromLuma() ? -0.15 : -4}
+              max={brush.tipReliefFromLuma() ? 0.15 : 4}
+              step={brush.tipReliefFromLuma() ? 0.001 : 0.05}
+              displayValue={(v) =>
+                (v >= 0 ? '+' : '') + v.toFixed(brush.tipReliefFromLuma() ? 3 : 2)
+              }
               onChange={brush.setNormalStrength}
-              presets={[
-                { label: 'Carve', value: -1 },
-                { label: 'Flat', value: 0 },
-                { label: 'Emboss', value: 1 },
-                { label: 'Deep', value: 2.5 }
-              ]}
+              presets={
+                brush.tipReliefFromLuma()
+                  ? [
+                      { label: 'Carve', value: -0.018 },
+                      { label: 'Flat', value: 0 },
+                      { label: 'Impasto', value: 0.018 },
+                      { label: 'Strong', value: 0.045 }
+                    ]
+                  : [
+                      { label: 'Carve', value: -1 },
+                      { label: 'Flat', value: 0 },
+                      { label: 'Emboss', value: 1 },
+                      { label: 'Deep', value: 2.5 }
+                    ]
+              }
             />
             <p class="text-[10px] text-zinc-500 leading-relaxed pl-0.5">
               <Show
                 when={fromMap('normal')}
-                fallback="Relief is generated from brush falloff/tip alpha. Negative values engrave."
+                fallback={
+                  brush.tipReliefFromLuma()
+                    ? 'Impasto relief from tip texture; independent of paint color. Negative values carve.'
+                    : 'Relief is generated from brush falloff/tip alpha. Negative values engrave.'
+                }
               >
                 Relief scaled from active material normal map.
               </Show>

@@ -51,6 +51,7 @@ export interface LoadOptions {
 }
 
 export interface ViewportHandle {
+  exportHeightPng16: (pieceIndex?: number) => Promise<string | undefined>
   loadFromUrl: (
     url: string,
     extension: string,

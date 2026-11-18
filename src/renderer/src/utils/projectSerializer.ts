@@ -62,7 +62,9 @@ export interface SerializedLayer {
  * bytes, and leaves top-level `layers` empty — builds older than this one
  * can't open it, which is why the version changed.
  */
-export const PROJECT_VERSION = 5
+// v6 adds lossless packed-RG 16-bit height per layer. Existing v1-v5 projects
+// remain readable; older applications cannot preserve this additional channel.
+export const PROJECT_VERSION = 6
 
 const MAGIC = 'MESHCOAT'
 /** Layout version of the binary container, independent of PROJECT_VERSION. */

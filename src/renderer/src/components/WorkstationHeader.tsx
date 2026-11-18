@@ -97,10 +97,31 @@ export const LIGHTING_OPTIONS: LightingOption[] = [
 ]
 
 const VIEW_OPTIONS: { value: ChannelViewMode; label: string; title: string }[] = [
-  { value: 'material', label: 'PBR', title: 'PBR Full Material: Complete composite with lighting and all channels' },
-  { value: 'roughness', label: 'Rough', title: 'Inspect Roughness Channel: Grayscale preview of surface roughness' },
-  { value: 'metalness', label: 'Metal', title: 'Inspect Metalness Channel: Grayscale preview of metallic mask' },
-  { value: 'normal', label: 'Norm', title: 'Inspect Normal Map: Tangent space RGB normal vector map' }
+  {
+    value: 'height',
+    label: 'Height',
+    title: 'Inspect retained height (20× display gain; neutral gray = zero)'
+  },
+  {
+    value: 'material',
+    label: 'PBR',
+    title: 'PBR Full Material: Complete composite with lighting and all channels'
+  },
+  {
+    value: 'roughness',
+    label: 'Rough',
+    title: 'Inspect Roughness Channel: Grayscale preview of surface roughness'
+  },
+  {
+    value: 'metalness',
+    label: 'Metal',
+    title: 'Inspect Metalness Channel: Grayscale preview of metallic mask'
+  },
+  {
+    value: 'normal',
+    label: 'Norm',
+    title: 'Inspect Normal Map: Tangent space RGB normal vector map'
+  }
 ]
 
 export default function WorkstationHeader(props: WorkstationHeaderProps): JSX.Element {
@@ -326,7 +347,9 @@ export default function WorkstationHeader(props: WorkstationHeaderProps): JSX.El
                         <span class="text-xs font-semibold leading-tight">{item.label}</span>
                         <span
                           class={`text-[10px] leading-tight truncate ${
-                            isSelected() ? 'text-blue-100' : 'text-zinc-400 group-hover:text-zinc-300'
+                            isSelected()
+                              ? 'text-blue-100'
+                              : 'text-zinc-400 group-hover:text-zinc-300'
                           }`}
                         >
                           {item.subtitle}
@@ -342,7 +365,6 @@ export default function WorkstationHeader(props: WorkstationHeaderProps): JSX.El
             </div>
           </Show>
         </div>
-
 
         <div class="w-px h-4 bg-[var(--border-color)]" />
 

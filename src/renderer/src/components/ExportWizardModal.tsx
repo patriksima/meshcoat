@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For, Show } from 'solid-js'
+import { createSignal, createEffect, For, Show, type JSX } from 'solid-js'
 import { Modal, Button, SegmentedControl, Checkbox, TextInput, Label } from './ui'
 import {
   DownloadIcon,
@@ -239,7 +239,7 @@ async function exportIndividualMode(
   return writtenCount
 }
 
-export default function ExportWizardModal(props: ExportWizardModalProps) {
+export default function ExportWizardModal(props: ExportWizardModalProps): JSX.Element {
   const getHandle = (): ViewportHandle | undefined => {
     return props.getViewportHandle ? props.getViewportHandle() : props.viewportHandle
   }
@@ -252,10 +252,10 @@ export default function ExportWizardModal(props: ExportWizardModalProps) {
     return h?.pieces() ?? []
   }
 
-  const initialStem = () => props.modelName.replace(/\.[^/.]+$/, '') || 'Model'
+  const initialStem = (): string => props.modelName.replace(/\.[^/.]+$/, '') || 'Model'
   const [stem, setStem] = createSignal(initialStem())
 
-  const isMultiPiece = () => getPieces().length > 1
+  const isMultiPiece = (): boolean => getPieces().length > 1
   const [mode, setMode] = createSignal<ExportMode>(
     getPieces().length > 1 ? 'individual' : 'combined'
   )
@@ -281,7 +281,7 @@ export default function ExportWizardModal(props: ExportWizardModalProps) {
   const [resolution, setResolution] = createSignal<ResolutionOption>('native')
   const [isExporting, setIsExporting] = createSignal(false)
 
-  function applyPreset(preset: 'pbr' | 'colorOnly' | 'allUnpacked') {
+  function applyPreset(preset: 'pbr' | 'colorOnly' | 'allUnpacked'): void {
     if (preset === 'pbr') {
       setExportBaseColor(true)
       setExportOrm(true)
@@ -434,9 +434,51 @@ export default function ExportWizardModal(props: ExportWizardModalProps) {
         'success'
       )
       props.onClose()
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error('Export wizard error:', err)
-      props.onToast?.(`Export failed: ${err?.message || err}`, 'error')
+      props.onToast?.(`Export failed: ${err instanceof Error ? err.message : String(err)}`, 'error')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  async function exportNativeHeight(): Promise<void> {
+    const handle = getHandle()
+    if (!handle) {
+      return
+    }
+    const list = getPieces().filter((p) => handle.paintedChannels(p.index).includes('height'))
+    if (!list.length) {
+      props.onToast?.('No authored height has been painted yet.', 'info')
+      return
+    }
+    const target = await window.api.saveFileDialog({
+      defaultPath: `${stem() || 'asset'}_Height16.png`,
+      filters: [{ name: '16-bit height PNG', extensions: ['png'] }],
+      key: 'export',
+      nearPath: props.modelPath
+    })
+    if (!target) {
+      return
+    }
+    setIsExporting(true)
+    try {
+      const base = target.replace(/\.png$/i, '')
+      for (const p of list) {
+        const url = await handle.exportHeightPng16(p.index)
+        if (url) {
+          await window.api.savePng(
+            list.length === 1 ? target : `${base}_${p.name.replace(/[^a-z0-9_-]/gi, '_')}.png`,
+            url
+          )
+        }
+      }
+      props.onToast?.(
+        `Exported ${list.length} native 16-bit height map(s). Zero=32768; signed model units.`,
+        'success'
+      )
+    } catch (error) {
+      props.onToast?.(`Height export failed: ${String(error)}`, 'error')
     } finally {
       setIsExporting(false)
     }
@@ -470,6 +512,13 @@ export default function ExportWizardModal(props: ExportWizardModalProps) {
       }
     >
       <div class="flex flex-col gap-4 text-xs text-zinc-300">
+        <Button variant="secondary" onClick={exportNativeHeight} disabled={isExporting()}>
+          Export Height16 PNG (native, per piece)
+        </Button>
+        <p class="text-[11px] text-zinc-400">
+          Height stays 16-bit. Native resolution preserves precision; zero is 32768, range is −1 to
+          +1 model units. PBR maps use the controls below.
+        </p>
         {/* Mode Selector for Multi-Piece Models */}
         <Show
           when={isMultiPiece()}

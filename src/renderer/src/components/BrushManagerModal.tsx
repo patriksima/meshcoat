@@ -327,7 +327,7 @@ export default function BrushManagerModal(props: { isOpen: boolean; onClose: () 
                       >
                         <div class="relative aspect-square rounded-lg overflow-hidden checkerboard-bg flex items-center justify-center p-1 mb-2 border border-zinc-800">
                           <img
-                            src={brushItem.dataUrl}
+                            src={brushItem.previewUrl ?? brushItem.dataUrl}
                             alt={brushItem.name}
                             class="max-w-full max-h-full object-contain filter drop-shadow group-hover:scale-105 transition-transform"
                           />

@@ -1,0 +1,12 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://textures/asset_albedo.png" id="1_hlew4"]
+[ext_resource type="Texture2D" path="res://textures/asset_normal.png" id="2_nufnr"]
+[ext_resource type="Texture2D" path="res://textures/asset_roughness.png" id="3_nd2c8"]
+
+[resource]
+albedo_texture = ExtResource("1_hlew4")
+metallic_specular = 0.25
+roughness_texture = ExtResource("3_nd2c8")
+normal_enabled = true
+normal_texture = ExtResource("2_nufnr")

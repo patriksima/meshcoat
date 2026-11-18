@@ -1,4 +1,4 @@
-import { createSignal, createEffect, createMemo, on, untrack, For, Show } from 'solid-js'
+import { createSignal, createEffect, createMemo, on, untrack, For, Show, type JSX } from 'solid-js'
 import {
   hexToHsv,
   hsvToHex,
@@ -18,7 +18,7 @@ export interface ColorPickerProps {
   class?: string
 }
 
-export default function ColorPicker(props: ColorPickerProps) {
+export default function ColorPicker(props: ColorPickerProps): JSX.Element {
   let svAreaRef: HTMLDivElement | undefined
   let hueBarRef: HTMLDivElement | undefined
   let nativeInputRef: HTMLInputElement | undefined
@@ -72,7 +72,7 @@ export default function ColorPicker(props: ColorPickerProps) {
   const rgb = createMemo(() => hexToRgb(props.color))
 
   // Update SV from pointer coordinates
-  const updateSVFromPointer = (clientX: number, clientY: number) => {
+  const updateSVFromPointer = (clientX: number, clientY: number): void => {
     if (!svAreaRef) {
       return
     }
@@ -92,14 +92,16 @@ export default function ColorPicker(props: ColorPickerProps) {
   }
 
   // Update Hue from pointer coordinates
-  const updateHueFromPointer = (clientX: number) => {
+  const updateHueFromPointer = (clientX: number, clientY: number): void => {
     if (!hueBarRef) {
       return
     }
     const rect = hueBarRef.getBoundingClientRect()
-    const x = Math.min(Math.max(0, clientX - rect.left), rect.width)
-    const ratio = Math.min(1, Math.max(0, (x - 8) / Math.max(1, rect.width - 16)))
-    const h = Math.round(ratio * 360) % 360
+    const angle = Math.atan2(
+      clientY - rect.top - rect.height / 2,
+      clientX - rect.left - rect.width / 2
+    )
+    const h = (Math.round((angle * 180) / Math.PI) + 360) % 360
 
     const newHsv: HSV = { h, s: hsv().s, v: hsv().v }
     setHsv(newHsv)
@@ -108,48 +110,55 @@ export default function ColorPicker(props: ColorPickerProps) {
     emit(newHex)
   }
 
-  const handleSvPointerDown = (e: PointerEvent) => {
+  const handleSvPointerDown = (e: PointerEvent): void => {
+    e.stopPropagation()
     e.preventDefault()
     setIsDraggingSV(true)
     svAreaRef?.setPointerCapture(e.pointerId)
     updateSVFromPointer(e.clientX, e.clientY)
   }
 
-  const handleSvPointerMove = (e: PointerEvent) => {
+  const handleSvPointerMove = (e: PointerEvent): void => {
+    e.stopPropagation()
     if (!isDraggingSV()) {
       return
     }
     updateSVFromPointer(e.clientX, e.clientY)
   }
 
-  const handleSvPointerUp = (e: PointerEvent) => {
+  const handleSvPointerUp = (e: PointerEvent): void => {
+    e.stopPropagation()
     if (isDraggingSV()) {
       try {
         svAreaRef?.releasePointerCapture(e.pointerId)
-      } catch {}
+      } catch {
+        /* Capture may already have been released by the platform. */
+      }
       setIsDraggingSV(false)
     }
   }
 
-  const handleHuePointerDown = (e: PointerEvent) => {
+  const handleHuePointerDown = (e: PointerEvent): void => {
     e.preventDefault()
     setIsDraggingHue(true)
     hueBarRef?.setPointerCapture(e.pointerId)
-    updateHueFromPointer(e.clientX)
+    updateHueFromPointer(e.clientX, e.clientY)
   }
 
-  const handleHuePointerMove = (e: PointerEvent) => {
+  const handleHuePointerMove = (e: PointerEvent): void => {
     if (!isDraggingHue()) {
       return
     }
-    updateHueFromPointer(e.clientX)
+    updateHueFromPointer(e.clientX, e.clientY)
   }
 
-  const handleHuePointerUp = (e: PointerEvent) => {
+  const handleHuePointerUp = (e: PointerEvent): void => {
     if (isDraggingHue()) {
       try {
         hueBarRef?.releasePointerCapture(e.pointerId)
-      } catch {}
+      } catch {
+        /* Capture may already have been released by the platform. */
+      }
       setIsDraggingHue(false)
     }
   }
@@ -258,43 +267,58 @@ export default function ColorPicker(props: ColorPickerProps) {
     <div
       class={`flex flex-col gap-3 p-3 w-full min-w-0 max-w-full box-border overflow-hidden bg-zinc-950/80 border border-zinc-800/90 rounded-lg select-none ${props.class ?? ''}`}
     >
-      {/* Saturation / value field */}
-      <div
-        ref={svAreaRef}
-        class="relative w-full h-40 rounded-md cursor-crosshair touch-none overflow-hidden border border-zinc-700/60 shadow-inner"
-        style={{ 'background-color': `hsl(${hsv().h}, 100%, 50%)` }}
-        onPointerDown={handleSvPointerDown}
-        onPointerMove={handleSvPointerMove}
-        onPointerUp={handleSvPointerUp}
-      >
-        <div class="absolute inset-0 bg-gradient-to-r from-white to-transparent pointer-events-none" />
-        <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent pointer-events-none" />
-        <div
-          class="absolute w-4 h-4 -ml-2 -mt-2 rounded-full border-2 border-white shadow-[0_0_3px_rgba(0,0,0,0.9)] pointer-events-none"
-          style={{
-            left: `calc(8px + (100% - 16px) * ${hsv().s})`,
-            top: `calc(8px + (100% - 16px) * ${1 - hsv().v})`,
-            'background-color': props.color
-          }}
-        />
-      </div>
-
-      {/* Hue */}
+      {/* Hue wheel, with a saturation/value square in the center. */}
       <div
         ref={hueBarRef}
-        class="relative w-full h-3.5 rounded-full cursor-pointer touch-none border border-zinc-700/60 shadow-inner"
+        role="slider"
+        aria-label="Hue wheel"
+        aria-valuemin={0}
+        aria-valuemax={359}
+        aria-valuenow={hsv().h}
+        tabIndex={0}
+        class="relative w-full max-w-56 aspect-square mx-auto rounded-full cursor-crosshair touch-none shrink-0"
         style={{
-          background:
-            'linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)'
+          background: 'conic-gradient(from 90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)'
         }}
         onPointerDown={handleHuePointerDown}
         onPointerMove={handleHuePointerMove}
         onPointerUp={handleHuePointerUp}
+        onPointerCancel={handleHuePointerUp}
+        onKeyDown={(e) => {
+          if (['ArrowLeft', 'ArrowDown', 'ArrowRight', 'ArrowUp'].includes(e.key)) {
+            e.preventDefault()
+            e.stopPropagation()
+            handleHsvChange('h', hsv().h + (['ArrowLeft', 'ArrowDown'].includes(e.key) ? -1 : 1))
+          }
+        }}
       >
+        <div class="absolute inset-[18px] rounded-full bg-zinc-950 pointer-events-none" />
         <div
-          class="absolute top-1/2 -translate-y-1/2 -ml-2 w-4 h-4 rounded-full border-2 border-white shadow-[0_0_3px_rgba(0,0,0,0.9)] pointer-events-none"
+          ref={svAreaRef}
+          aria-label="Saturation and value"
+          class="absolute left-[22%] top-[22%] w-[56%] h-[56%] rounded-md cursor-crosshair touch-none overflow-hidden border border-zinc-700/60 shadow-inner"
+          style={{ 'background-color': `hsl(${hsv().h}, 100%, 50%)` }}
+          onPointerDown={handleSvPointerDown}
+          onPointerMove={handleSvPointerMove}
+          onPointerUp={handleSvPointerUp}
+        >
+          <div class="absolute inset-0 bg-gradient-to-r from-white to-transparent pointer-events-none" />
+          <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent pointer-events-none" />
+          <div
+            class="absolute w-4 h-4 -ml-2 -mt-2 rounded-full border-2 border-white shadow-[0_0_3px_rgba(0,0,0,0.9)] pointer-events-none"
+            style={{
+              left: `calc(8px + (100% - 16px) * ${hsv().s})`,
+              top: `calc(8px + (100% - 16px) * ${1 - hsv().v})`,
+              'background-color': props.color
+            }}
+          />
+        </div>
+
+        <div
+          class="absolute -mt-2 -ml-2 w-4 h-4 rounded-full border-2 border-white shadow-[0_0_3px_rgba(0,0,0,0.9)] pointer-events-none"
           style={{
-            left: `calc(8px + (100% - 16px) * ${hsv().h / 360})`,
+            left: `${50 + 46 * Math.cos((hsv().h * Math.PI) / 180)}%`,
+            top: `${50 + 46 * Math.sin((hsv().h * Math.PI) / 180)}%`,
             'background-color': `hsl(${hsv().h}, 100%, 50%)`
           }}
         />

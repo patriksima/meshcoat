@@ -104,6 +104,9 @@ const [color, setColor] = createSignal('#ffffff')
 const [texturePath, setTexturePathRaw] = createSignal<string | null>(null)
 /** Selected brush tip image / ABR alpha mask. */
 const [tipTexturePath, setTipTexturePathRaw] = createSignal<string | null>(null)
+const [tipReliefFromLuma, setTipReliefFromLuma] = createSignal(false)
+const [tipHeight16, setTipHeight16] = createSignal(false)
+const [heightAmount, setHeightAmount] = createSignal(0.012)
 /** Projection mapping mode for the brush tool: 'uv' (straightforward UV), 'triplanar' (world triplanar), or 'tip' (brush tip stamp). */
 /**
  * Defaults to surface UV, not world triplanar: "paint the picture I picked onto
@@ -136,7 +139,8 @@ const [channelEnabled, setChannelEnabledRaw] = createSignal<Record<PaintChannel,
   baseColor: true,
   roughness: false,
   metalness: false,
-  normal: false
+  normal: false,
+  height: false
 })
 /** 0 = mirror-gloss, 1 = fully matte. */
 const [roughnessValue, setRoughnessValueRaw] = createSignal(0.5)
@@ -210,7 +214,13 @@ export function setMaterialSet(set: MaterialSet | null): void {
 }
 
 /** Local copy of the channel list — brush.ts must not import from channels.ts at runtime. */
-const PAINT_CHANNELS_ALL: PaintChannel[] = ['baseColor', 'roughness', 'metalness', 'normal']
+const PAINT_CHANNELS_ALL: PaintChannel[] = [
+  'baseColor',
+  'roughness',
+  'metalness',
+  'normal',
+  'height'
+]
 
 /** True when the active set supplies a map for this channel. */
 export function setSuppliesChannel(channel: PaintChannel): boolean {
@@ -277,8 +287,12 @@ export function buildChannelPayload(options?: {
   if (enabled.metalness) {
     payload.metalness = metalnessValue()
   }
-  if (enabled.normal) {
+  // Height is authoritative: do not paint a normal buffer that the stack immediately replaces.
+  if (enabled.normal && !enabled.height) {
     payload.normal = normalStrength()
+  }
+  if (enabled.height) {
+    payload.height = heightAmount()
   }
   return payload
 }
@@ -972,6 +986,12 @@ export const brush = {
   setColor,
   texturePath,
   tipTexturePath,
+  tipReliefFromLuma,
+  tipHeight16,
+  setTipHeight16,
+  heightAmount,
+  setHeightAmount,
+  setTipReliefFromLuma,
   setTipTexturePath,
   selectedFaces,
   selectionHighlightHidden,

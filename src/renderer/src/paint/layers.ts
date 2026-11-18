@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { createHeightNormalMaterial } from './heightData'
 import {
   PaintEngine,
   DEFAULT_TEXTURE_SIZE,
@@ -172,6 +173,9 @@ export class LayerStack {
   private blendMaterial: ReturnType<typeof createBlendCompositeMaterial>
   /** Flattened, material-ready normal map — see createChannelFlattenMaterial. */
   private normalTarget: THREE.WebGLRenderTarget | null = null
+  private heightTarget: THREE.WebGLRenderTarget | null = null
+  private heightNormalMaterial: THREE.ShaderMaterial | null = null
+  private heightNormalScene: THREE.Scene | null = null
   /**
    * Flattened roughness and metalness, packed the way MeshStandardMaterial
    * reads them (and glTF/Unreal/Unity ship them): R = AO (always 1), G =
@@ -229,6 +233,9 @@ export class LayerStack {
         present.add(channel)
       }
     }
+    if (present.has('height')) {
+      present.add('normal')
+    }
     return PAINT_CHANNELS.filter((c) => present.has(c))
   }
 
@@ -266,7 +273,9 @@ export class LayerStack {
   }
 
   private hasChannel(channel: PaintChannel): boolean {
-    return this.layers.some((l) => l.engine.hasChannel(channel))
+    return this.layers.some(
+      (l) => l.engine.hasChannel(channel) || (channel === 'normal' && l.engine.hasChannel('height'))
+    )
   }
 
   /**
@@ -297,6 +306,9 @@ export class LayerStack {
 
   /** The render target behind channelTexture — what the exporters read back. */
   channelTarget(channel: PaintChannel): THREE.WebGLRenderTarget | null {
+    if (channel === 'height') {
+      return this.heightTarget
+    }
     if (channel === 'baseColor') {
       return this.compositeTarget
     }
@@ -1017,7 +1029,11 @@ export class LayerStack {
     }
 
     this.compositeChannel('baseColor', maskMap, folderMap)
+    const hasHeight = this.hasChannel('height')
     for (const channel of PBR_CHANNELS) {
+      if (channel === 'normal' && hasHeight) {
+        continue // Derived once from the final height below; no legacy normal composite needed.
+      }
       if (this.hasChannel(channel)) {
         this.compositeChannel(channel, maskMap, folderMap)
       } else if (this.ormTarget && this.channelComponent(channel) !== null) {
@@ -1028,6 +1044,9 @@ export class LayerStack {
       }
     }
 
+    if (this.hasChannel('height') && this.heightTarget) {
+      this.bakeHeightNormals()
+    }
     this.renderer.setClearColor(prevClearColor, prevClearAlpha)
     this.renderer.setRenderTarget(prevTarget)
     this.renderer.autoClear = prevAutoClear
@@ -1087,6 +1106,7 @@ export class LayerStack {
       u.tSource.value = sourceTexture
       u.uOpacity.value = opacity
       u.uBlendMode.value = blendModeIndex(blendMode)
+      u.uHeight.value = channel === 'height' ? 1 : 0
       if (mask) {
         u.uUseMask.value = 1
         u.tMask.value = mask.engine.texture
@@ -1188,7 +1208,10 @@ export class LayerStack {
   private flattenChannel(channel: PaintChannel, source: THREE.Texture | null): void {
     const component = this.channelComponent(channel)
     let output: THREE.WebGLRenderTarget
-    if (component === null) {
+    if (channel === 'height') {
+      this.heightTarget ??= createChannelRenderTarget(this.textureSize, channel)
+      output = this.heightTarget
+    } else if (component === null) {
       this.normalTarget ??= createChannelRenderTarget(this.textureSize, channel)
       output = this.normalTarget
     } else {
@@ -1226,6 +1249,23 @@ export class LayerStack {
   }
 
   /** Low-res preview thumbnail of one layer's own buffer (not the composite). */
+  private bakeHeightNormals(): void {
+    if (!this.heightNormalMaterial) {
+      this.heightNormalMaterial = createHeightNormalMaterial(this.textureSize)
+      this.heightNormalScene = new THREE.Scene()
+      const mesh = new THREE.Mesh(this.surface.geometry, this.heightNormalMaterial)
+      mesh.frustumCulled = false
+      this.heightNormalScene.add(mesh)
+    }
+    this.normalTarget ??= createChannelRenderTarget(this.textureSize, 'normal')
+    this.heightNormalMaterial.uniforms.tHeight.value = this.heightTarget!.texture
+    this.heightNormalMaterial.uniforms.tCoverage.value = this.surface.coverageMask.texture
+    this.renderer.setRenderTarget(this.normalTarget)
+    this.renderer.setClearColor(new THREE.Color(0.5, 0.5, 1), 1)
+    this.renderer.clear(true, false, false)
+    this.renderer.render(this.heightNormalScene!, this.orthoCamera)
+  }
+
   previewFor(layer: Layer): string {
     return renderThumbnail(this.renderer, layer.engine.texture)
   }
@@ -1432,7 +1472,9 @@ export class LayerStack {
 
   /** No GPU resources to free for a CPU-side snapshot — kept for symmetry with
    * the history manager's call sites and to make dropping the reference explicit. */
-  disposeSnapshot(_state: StackSnapshot): void {}
+  disposeSnapshot(state: StackSnapshot): void {
+    void state
+  }
 
   dispose(): void {
     this.history?.dispose()
@@ -1443,6 +1485,8 @@ export class LayerStack {
     this.recompositePlainMaterial.dispose()
     this.flattenMaterial?.dispose()
     this.normalTarget?.dispose()
+    this.heightTarget?.dispose()
+    this.heightNormalMaterial?.dispose()
     this.ormTarget?.dispose()
     for (const layer of this.layers) {
       layer.engine.dispose()

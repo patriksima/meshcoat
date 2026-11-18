@@ -14,6 +14,10 @@ export interface AbrBrushPreset {
   dataUrl: string
   packName: string
   sampleId?: string
+  /** MeshCoat tips pack estimated relief in RGB and independent coverage in A. */
+  impasto?: boolean
+  authoredHeight?: boolean
+  previewUrl?: string
 }
 
 export interface AbrFileResult {
@@ -130,7 +134,7 @@ export function getStandardBrushPresets(): AbrBrushPreset[] {
       dataUrl: generateProceduralTip(128, (ctx, s) => {
         const rad = s / 2
         let seed = 42
-        const rnd = () => {
+        const rnd = (): number => {
           seed = (seed * 9301 + 49297) % 233280
           return seed / 233280
         }
@@ -158,7 +162,7 @@ export function getStandardBrushPresets(): AbrBrushPreset[] {
       dataUrl: generateProceduralTip(128, (ctx, s) => {
         const rad = s / 2
         let seed = 1337
-        const rnd = () => {
+        const rnd = (): number => {
           seed = (seed * 16807) % 2147483647
           return (seed - 1) / 2147483646
         }

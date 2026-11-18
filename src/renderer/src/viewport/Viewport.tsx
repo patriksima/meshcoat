@@ -1,4 +1,5 @@
 import { gradient } from '../paint/gradient'
+import { registerAutomationViewport } from '../automation'
 import { lasso } from '../paint/pixelSelection'
 import { clone } from '../paint/clone'
 import { cancelLasso, clearPixelSelection, invertPixelSelection } from './viewportLasso'
@@ -13,6 +14,7 @@ import { stencil, setStencilTransforming } from '../paint/stencil'
 import { brushPresets } from '../paint/brushPresets'
 import { PBR_CHANNELS, type PaintChannel } from '../paint/channels'
 import { renderTargetToPngDataUrl, packOrmDataUrl } from '../paint/exportTexture'
+import { height16Png } from '../paint/heightData'
 import { OcclusionDepthPass } from '../paint/occlusionDepth'
 import { markContextLost } from '../paint/gpuResources'
 import { loadPaintTexture } from '../utils/textureLoad'
@@ -656,6 +658,12 @@ export default function Viewport(props: ViewportProps): JSX.Element {
         rt.sceneHandle.controls.focus(sphere.center, sphere.radius || 1)
       },
       getLayerStack: (pieceIndex?: number) => stackFor(rt, pieceIndex),
+      exportHeightPng16: async (pieceIndex?: number) => {
+        const target = stackFor(rt, pieceIndex)?.channelTarget('height')
+        return rt.sceneHandle && target
+          ? await height16Png(rt.sceneHandle.renderer, target)
+          : undefined
+      },
       exportBaseColorPng: (pieceIndex?: number) => {
         const stack = stackFor(rt, pieceIndex)
         if (!rt.sceneHandle || !stack) {
@@ -783,6 +791,7 @@ export default function Viewport(props: ViewportProps): JSX.Element {
       canRedo: () => rt.layerStack?.history.canRedo() ?? false
     }
 
+    registerAutomationViewport(rt)
     props.onReady?.(handle)
 
     // Expose helpers on window for automation / test suite
@@ -799,6 +808,11 @@ export default function Viewport(props: ViewportProps): JSX.Element {
       }
       w.__closePieMenu = () => rt.setPieMenu(null)
       w.__setWireframe = (v: boolean) => setWireframeVisible(rt, v)
+      if (import.meta.env.DEV) {
+        // Dev-only fixture access: tests still use the actual pointer handlers,
+        // UV projection, GPU paint passes, compositor and export functions.
+        Object.assign(window, { __paintRuntime: rt })
+      }
     }
 
     const animate = (): void => {
@@ -1117,7 +1131,9 @@ export default function Viewport(props: ViewportProps): JSX.Element {
       return
     }
     rt.textureLoader.load(toAssetUrl(path), (texture) => {
-      texture.colorSpace = THREE.SRGBColorSpace
+      // Tips carry coverage and optional relief data, not display colors.
+      // White RGB ABR masks are unchanged; packed relief must stay linear.
+      texture.colorSpace = THREE.NoColorSpace
       texture.wrapS = THREE.ClampToEdgeWrapping
       texture.wrapT = THREE.ClampToEdgeWrapping
       rt.tipTextures.set(path, texture)

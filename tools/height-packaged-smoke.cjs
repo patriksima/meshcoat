@@ -1,0 +1,21 @@
+const {_electron:electron}=require('playwright-core')
+const path=require('path'),fs=require('fs')
+;(async()=>{
+ const app=await electron.launch({executablePath:path.resolve('dist/win-unpacked/MeshCoat.exe'),env:{...process.env,MESHCOAT_USER_DATA:path.resolve('work/profiles/height-packaged')},timeout:60000})
+ try{
+  const page=await app.firstWindow();const errors=[];page.on('pageerror',e=>errors.push(e.message))
+  await page.waitForFunction(()=>window.__viewportHandle);await page.waitForTimeout(1000)
+  await app.evaluate(({dialog},target)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[target]})},path.resolve('impasto/height_tree.meshcoat'))
+  await page.getByRole('button',{name:'Open .meshcoat File...',exact:true}).click()
+  await page.waitForFunction(()=>window.__viewportHandle.paintedChannels().includes('height'))
+  const height=await page.evaluate(()=>window.__viewportHandle.exportHeightPng16())
+  fs.writeFileSync('impasto/height-evidence/packaged-height.png',Buffer.from(height.split(',')[1],'base64'))
+  await page.getByRole('button',{name:'Library',exact:true}).click()
+  await page.getByText('MeshCoat Sculpt 1',{exact:true}).last().click()
+  await page.screenshot({path:'impasto/height-evidence/packaged-app.png'})
+  const info=await page.evaluate(()=>({channels:window.__viewportHandle.paintedChannels(),pieces:window.__viewportHandle.pieces(),devHook:!!window.__paintRuntime}))
+  fs.writeFileSync('impasto/height-evidence/packaged.json',JSON.stringify({info,errors},null,2))
+  if(errors.length)throw Error(errors.join('\n'))
+  console.log(JSON.stringify({info,errors}))
+ }finally{await app.evaluate(({app})=>app.exit(0))}
+})().catch(e=>{console.error(e);process.exit(1)})

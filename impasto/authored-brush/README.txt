@@ -1,0 +1,3 @@
+Original analytic brush sculpt authored for MeshCoat. No memileo pixels, alpha masks or textures used. Height16 is a real authored scalar field, not brightness recovered from lighting. Packed PNG: R=height high byte, G=low byte, B=preview high byte, A=coverage. Original source algorithm is tools/make_authored_brush.py. You may use and modify these original brush assets for MeshCoat and commercial artwork.
+
+Permission for these original brush assets: use, copy, modify and redistribute for any purpose, including commercial projects, without requiring attribution. This does not change the GPL license of MeshCoat or the separate CC BY-SA license of bundled memileo resources.

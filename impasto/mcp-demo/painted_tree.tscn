@@ -1,0 +1,11 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="./painted_tree_materials.gd" id="script"]
+[ext_resource type="PackedScene" path="./painted_tree.glb" id="model"]
+[ext_resource type="Material" path="./painted_tree.tres" id="m0"]
+
+[node name="painted_tree" type="Node3D"]
+script = ExtResource("script")
+source_model = ExtResource("model")
+paint_materials = Array[Material]([ExtResource("m0")])
+piece_names = PackedStringArray("test_tree")

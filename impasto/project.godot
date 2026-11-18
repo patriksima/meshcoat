@@ -1,0 +1,18 @@
+; Standalone procedural material preview.
+config_version=5
+
+[application]
+config/name="MeshCoat Impasto Preview"
+run/main_scene="res://preview.tscn"
+
+[display]
+window/size/viewport_width=1200
+window/size/viewport_height=1000
+window/size/window_width_override=1200
+window/size/window_height_override=1000
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
+environment/defaults/default_clear_color=Color(0.11, 0.13, 0.14, 1)

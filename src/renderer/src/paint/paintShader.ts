@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { HEIGHT_GLSL } from './heightData'
 import {
   BRUSH_MASK_UNIFORMS_GLSL,
   BRUSH_MASK_GLSL,
@@ -41,6 +42,8 @@ ${BRUSH_MASK_UNIFORMS_GLSL}
   uniform float uTextureScale;
   uniform sampler2D uBrushTipTexture;
   uniform float uUseTipTexture;
+  uniform float uTipReliefFromLuma;
+  uniform float uTipHeight16;
   uniform float uStampMode;
   // Face selection (spec: select faces, paint/fill only within them).
   uniform float uRestrictFace;
@@ -143,6 +146,7 @@ ${BRUSH_MASK_UNIFORMS_GLSL}
   varying float vSelected;
 
 ${BRUSH_MASK_GLSL}
+${HEIGHT_GLSL}
 
   /**
    * The dab's height field, sampled in the brush's own tangent plane (the same
@@ -153,7 +157,12 @@ ${BRUSH_MASK_GLSL}
   float dabHeight(vec2 p) {
     if (uUseTipTexture > 0.5) {
       float inside = step(0.0, p.x) * step(p.x, 1.0) * step(0.0, p.y) * step(p.y, 1.0);
-      return texture2D(uBrushTipTexture, p).a * inside;
+      vec4 tip = texture2D(uBrushTipTexture, p);
+      if (uTipHeight16 > 0.5) return dot(tip.rg,vec2(65280.0,255.0))/65535.0 * inside;
+      // Optional packed relief proxy, never a claim of measured paint height.
+      // ABR and standard tips keep the existing alpha-derived relief.
+      float relief = mix(1.0, dot(tip.rgb, vec3(0.299, 0.587, 0.114)), uTipReliefFromLuma);
+      return relief * tip.a * inside;
     }
     if (uUseTexture > 0.5 && uStampMode > 0.5) {
       float inside = step(0.0, p.x) * step(p.x, 1.0) * step(0.0, p.y) * step(p.y, 1.0);
@@ -462,9 +471,22 @@ ${BRUSH_MASK_GLSL}
       targetAlpha = uBrushColor.a;
     }
 
+    if (uChannelMode == 3) {
+      float oldHeight=readHeight(prevRaw);
+      float candidate=dabHeight(stampUv)*uNormalStrength*uBrushOpacity;
+      float raised=uNormalStrength>=0.0 ? max(oldHeight,candidate) : min(oldHeight,candidate);
+      if(uFillMode>0.5) raised=uNormalStrength;
+      if(uBrushColor.a<0.5) raised=0.0;
+      // Within one layer dabs build an envelope, not a frame-rate-dependent sum.
+      gl_FragColor=packHeight(mix(oldHeight,raised,clamp(strength,0.0,1.0)));
+      return;
+    }
     float outAlpha = mix(prev.a, targetAlpha, strength);
-    vec3 outColor = mix(prev.rgb, paintColor, strength);
-    gl_FragColor = vec4(outColor * outAlpha, outAlpha);
+    // Interpolate COVERED contributions, not straight RGB followed by a
+    // second coverage multiplication. The latter darkened translucent tip
+    // edges and even bent a neutral normal at zero relief on an empty layer.
+    vec3 outPremultiplied = mix(prevRaw.rgb, paintColor * targetAlpha, strength);
+    gl_FragColor = vec4(outPremultiplied, outAlpha);
   }
 `
 
@@ -476,6 +498,8 @@ export interface PaintUniforms extends BrushMaskUniforms {
   uUseTexture: THREE.IUniform<number>
   uBrushTipTexture: THREE.IUniform<THREE.Texture | null>
   uUseTipTexture: THREE.IUniform<number>
+  uTipReliefFromLuma: THREE.IUniform<number>
+  uTipHeight16: THREE.IUniform<number>
   uTextureScale: THREE.IUniform<number>
   uStampMode: THREE.IUniform<number>
   uRestrictFace: THREE.IUniform<number>
@@ -521,6 +545,8 @@ export function createPaintMaterial(): THREE.ShaderMaterial & { uniforms: PaintU
     uUseTexture: { value: 0 },
     uBrushTipTexture: { value: null },
     uUseTipTexture: { value: 0 },
+    uTipReliefFromLuma: { value: 0 },
+    uTipHeight16: { value: 0 },
     uTextureScale: { value: 1 },
     uStampMode: { value: 0 },
     uRestrictFace: { value: 0 },

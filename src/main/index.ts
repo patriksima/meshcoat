@@ -44,7 +44,12 @@ import {
 import { existsSync } from 'fs'
 import { getEffectiveBlender, convertBlendToGlb, testBlenderExecutable } from './blenderBridge'
 import { initLogger, createLogger, log, getLogsDir, type LogLevel } from './logger'
+import { startMcpBridge } from './mcpBridge'
 
+// Optional isolated profile for automation, tests and preview launchers.
+if (process.env.MESHCOAT_USER_DATA) {
+  app.setPath('userData', process.env.MESHCOAT_USER_DATA)
+}
 initLogger()
 const logger = createLogger('main')
 
@@ -149,6 +154,8 @@ function createWindow(): void {
       sandbox: false
     }
   })
+
+  startMcpBridge(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
     logger.info('Main window ready')

@@ -1,0 +1,5 @@
+const { app } = require('electron')
+const path = require('path')
+process.env.MESHCOAT_USER_DATA = path.resolve(__dirname, '../work/profiles/paint-qa')
+app.setPath('userData', process.env.MESHCOAT_USER_DATA)
+require('../out/main/index.js')

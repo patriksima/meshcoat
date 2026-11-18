@@ -1,0 +1,8 @@
+{
+  "encoding": "16-bit unsigned grayscale PNG, linear",
+  "zero": 32768,
+  "world_height": "(sample_uint16 - 32768) / 32767",
+  "units": "model/world units",
+  "blend": "max/min envelope per layer, additive height offsets between layers",
+  "preview": "height-preview-CONTRAST.png is contrast stretched for viewing only; asset_height.png is authoritative"
+}

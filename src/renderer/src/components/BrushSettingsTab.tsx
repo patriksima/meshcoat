@@ -275,7 +275,7 @@ export default function BrushSettingsTab(props: BrushSettingsTabProps) {
               }
             >
               <img
-                src={toAssetUrl(brush.tipTexturePath()!)}
+                src={brushPresets.active()?.previewUrl ?? toAssetUrl(brush.tipTexturePath()!)}
                 alt="Brush Tip"
                 class="w-full h-full object-contain p-1"
                 style={{ opacity: brush.opacity() }}

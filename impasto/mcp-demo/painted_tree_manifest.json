@@ -1,0 +1,26 @@
+{
+  "format": "meshcoat-godot-1",
+  "normal": "OpenGL Y+",
+  "heightEncoding": "PNG16 linear; (sample-32768)/32767 model units",
+  "scene": "painted_tree.tscn",
+  "sourceModel": "painted_tree.glb",
+  "pieces": [
+    {
+      "index": 0,
+      "name": "test_tree",
+      "material": "painted_tree.tres",
+      "maps": {
+        "albedo": "painted_tree_albedo.png",
+        "normal": "painted_tree_normal.png",
+        "roughness": "painted_tree_roughness.png",
+        "height": "painted_tree_height.png",
+        "metalness": "painted_tree_metalness.png"
+      }
+    }
+  ],
+  "limitations": [
+    "Height is preserved as a source PNG16; material relief uses the derived normal map, no geometry displacement.",
+    "Materials match imported mesh node names; unmatched names produce a Godot error.",
+    "No claim of complete surface coverage: inspect the model from several views before production use."
+  ]
+}

@@ -20,6 +20,7 @@ export interface FileFilter {
 }
 
 const api = {
+  automationEnabled: (): Promise<boolean> => ipcRenderer.invoke('mcp:is-enabled'),
   openFileDialog: (options?: {
     filters?: FileFilter[]
     multi?: boolean

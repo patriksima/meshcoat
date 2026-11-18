@@ -39,6 +39,7 @@ export function createChannelViewMaterial(): THREE.ShaderMaterial {
         if (uPremultiplied == 1 && texel.a > 0.0001) value /= texel.a;
         if (uComponent == 1) value = vec3(texel.g);
         else if (uComponent == 2) value = vec3(texel.b);
+        else if (uComponent == 3) value = vec3(clamp(0.5+(dot(texel.rg,vec2(65280.0,255.0))-32768.0)/32767.0*20.0,0.0,1.0));
         gl_FragColor = vec4(value, 1.0);
         // The renderer re-encodes to the output color space on write; these are
         // raw stored values, so opt out of tone mapping only — a filmic curve
